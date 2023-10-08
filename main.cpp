@@ -8,19 +8,7 @@ using INS = uint16_t;
 static constexpr Byte max_mem = 128;
 const int REG_SIZE = 3;
 
-class OPCODE {
-public:
-    OPCODE(uint16_t value) : value_(value & 0x1FFF) {}
 
-    uint16_t getValue() const {
-        return value_;
-    }
-
-private:
-    uint16_t value_;
-};
-
-////////
 
 class Register {
 public:
@@ -66,9 +54,10 @@ class CPU {
 
     //// INSTRUCTIONS
 
-    static constexpr INS ADDWF = 0b0000011100000011; // It loads to AC due to its 4th bit is 1. If its 0, it loads to LSB 2 bytes of address.
-    static constexpr INS ANDWF = 0b0000010100000011;
-    static constexpr INS CLRW = 0b0000000100000011;
+    static constexpr INS ADDWF = 0b00000111; // It loads to AC due to its 8th bit is 0. If its 1, it loads to LSB 7 bytes of address.
+    static constexpr INS ANDWF = 0b00000101;
+    static constexpr INS CLRW = 0b00000001;
+    
     //// INSTRUCTIONS
 
 public:
@@ -110,17 +99,23 @@ public:
 
     Byte* decodeInstruction(INS instruction){
         Byte OPCODE; // Instruction OPCODE
-        Byte addr; // Address, if d = 1.
         Byte d; // Destination, 0 for AC, 1 for file register
+        Byte addr; // Address, if d = 1
         Byte k; // Literal
-        Byte b; // Bıts for bit manipulation.
+        Byte b; // Bıts for bit manipulation
         Byte data[5];
-        switch((instruction & 0x0000) >> 12){
+        switch(instruction >> 12){
             case 0:{
                 std::cout<<"BYTE ORIANTED FILE REGISTER OPERATIONS!"<<std::endl;
-                OPCODE = ((instruction & 0x0000) >> 8);
-                addr = instruction & 0x7F;
-            }
+                OPCODE = (instruction >> 8);
+                addr = (instruction & 0x008F);
+                data[0]>>OPCODE;
+                data[1]>>addr;
+                return data;
+            }break;
+            default:{
+				std::cout<<"INSTRUCTION NOT FETCHED PROPERLY!"<<std::endl;
+			} break;
         }
     }
 
@@ -131,9 +126,6 @@ public:
         return Data;
     }
 
-    INS decodeInstruction(int bankNo, Byte pcl){
-        return banks[bankNo].program_memory
-    }
 
     void Execute(int &Cycles){
         while(Cycles > 0){
@@ -159,19 +151,16 @@ public:
 
             Byte InstructionAddr = Fetch(Cycles, BankNo); // Fetch the instruction
 
-            INS Instruction = decodeInstruction(InstructionAddr, BankNo);
-            // PC
+            Byte* Instruction = decodeInstruction(InstructionAddr);
 
-            //registers[0].value = banks[BankNo].program_memory[0];
-
-            switch(Instruction & 0xFF) {
+            switch(Instruction[0]) {
                 case ADDWF: {
                     Byte Value = Fetch(Cycles, BankNo); // Fetch the data
-                    if(ADDWF & (1 << 4)){
-                        Byte w_addr =  Instruction & 0x0F; // First 4 bits(LSB) of the Instruction ADDWF is an address to store if it's to stored in memory.
+                    if(ADDWF >> 7){ // d bit, store in data register if it is 1
+                        Byte w_addr =  Instruction[1]; // 0-6 bits of the Instruction ADDWF is an address to store if it's to stored in memory.
                         banks[BankNo].data_memory[w_addr] = Value + registers[2].value; // Store the stored data + AC in w_addr
                     }
-                    else{
+                    else{ // d bit, store in AC if it is 0
                         registers[1].value = Value + registers[1].value; // Store it in AC
                     }
                     /*
@@ -183,18 +172,17 @@ public:
                 }break;
                 case ANDWF:{
                     Byte Value = Fetch(Cycles, BankNo);
-                    if(ADDWF & (1 << 4)){
-                        Byte w_addr =  Instruction & 0x0F; // First 4 bits(LSB) of the Instruction ANDWF is an address to store if it's to stored in memory.
-                        banks[BankNo].data_memory[w_addr] = Value & registers[1].value; // Store the stored data + AC in w_addr
+                    if(ANDWF >> 7){ // d bit, store in data register if it is 1
+                        Byte w_addr =  Instruction[1]; // 0-6 bits of the Instruction ADDWF is an address to store if it's to stored in memory.
+                        banks[BankNo].data_memory[w_addr] = Value & registers[2].value; // Store the stored data + AC in w_addr
                     }
-                    else{
+                    else{ // d bit, store in AC if it is 0
                         registers[1].value = Value & registers[1].value; // Store it in AC
                     }
                 }break;
                 default:{
                     std::cout<<"INSTRUCTION NOT FETCHED PROPERLY!"<<std::endl;
                 }break;
-
             }break;
 
         }
@@ -221,50 +209,6 @@ private:
         MemoryBanks bank2;
 
         MemoryBanks bank3;
-        /*
-        for(int i = 0; i < max_mem ; i++){
-            if(registers.size() > i){
-                bank0.data[i] = registers[i].value;
-            }
-            else{
-                bank0.data[i] = 0;
-            }
-        }*/ // PC AND AC REGISTERS ARE NOT SUPPOSED TO BE IN THE MEMORY BANK.
-
-        for(int i = 0; i < max_mem; i++){
-            bank0.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank1.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank2.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank3.data_memory[i] = 0;
-        }
-
-        // RESETTING THE PROGRAM MEMORY
-
-        for(int i = 0; i < max_mem; i++){
-            bank0.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank1.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank2.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank3.program_memory[i] = 0;
-        }
-
 
         banks.push_back(bank0);
         banks.push_back(bank1);
@@ -274,6 +218,8 @@ private:
 
 
     void Reset(){
+    	
+    	// Clear all the information in program memory and general registers
         for(int i = 0; i < 4 ; i++){
             for(int k = 0; k < max_mem; k++){
                 banks[0].data_memory[i] = 0;
@@ -300,7 +246,7 @@ int main() {
     CPU PIC16F87;
     int Cycles = 3;
     //PIC16F87.editRegister(0, 0, 0b01110111);
-    PIC16F87.editProgramMemory(0, 0, 0b1110111);
+    PIC16F87.editProgramMemory(0, 0, 0b0011000011100000);
     PIC16F87.Execute(Cycles);
     PIC16F87.getBankDataInfo(0);
     std::cout<<"AC REG: "<<PIC16F87.getBankData(0, 1)<<std::endl;
