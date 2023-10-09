@@ -8,29 +8,12 @@ using INS = uint16_t;
 static constexpr Byte max_mem = 128;
 const int REG_SIZE = 3;
 
-class OPCODE {
-public:
-    OPCODE(uint16_t value) : value_(value & 0x1FFF) {}
-
-    uint16_t getValue() const {
-        return value_;
-    }
-
-private:
-    uint16_t value_;
-};
-
-////////
 
 class Register {
 public:
     Byte value;
 };
 
-class Instruction{
-public:
-    uint16_t INS;
-};
 
 class MemoryBanks {
 public:
@@ -66,9 +49,20 @@ class CPU {
 
     //// INSTRUCTIONS
 
-    static constexpr INS ADDWF = 0b0000011100000011; // It loads to AC due to its 4th bit is 1. If its 0, it loads to LSB 2 bytes of address.
-    static constexpr INS ANDWF = 0b0000010100000011;
-    static constexpr INS CLRW = 0b0000000100000011;
+    static constexpr Byte ADDWF = 0b00000111; // It loads to AC due to its 8th bit is 0. If its 1, it loads to LSB 7 bytes of address.
+    static constexpr Byte ANDWF = 0b00000101; // Same as above(ADDWF)
+    static constexpr Byte CLRF = 0b00000001;
+    static constexpr Byte COMF = 0b00001001; // Complements: 1010 -> 0101
+    static constexpr Byte DECF = 0b00000011; // Decrements: 1010 - 0001
+    static constexpr Byte DECFSZ = 0b00001011; // Decrements but skips if zero
+    static constexpr Byte INCF = 0b00001010; // Increments: 1010 + 1
+
+
+
+
+
+
+    static constexpr Byte BCF = 0b0001;
     //// INSTRUCTIONS
 
 public:
@@ -104,36 +98,46 @@ public:
         registers[regNo].value = data;
     }
 
-    void editProgramMemory(int bankNo, int index, Byte data){
+    void editProgramMemory(int bankNo, int index, INS data){
         banks[bankNo].program_memory[index] = data;
     }
 
-    Byte* decodeInstruction(INS instruction){
+    std::vector<Byte> decodeInstruction(INS instruction){
         Byte OPCODE; // Instruction OPCODE
-        Byte addr; // Address, if d = 1.
         Byte d; // Destination, 0 for AC, 1 for file register
+        Byte addr; // Address, if d = 1
         Byte k; // Literal
-        Byte b; // Bıts for bit manipulation.
-        Byte data[5];
-        switch((instruction & 0x0000) >> 12){
-            case 0:{
-                std::cout<<"BYTE ORIANTED FILE REGISTER OPERATIONS!"<<std::endl;
-                OPCODE = ((instruction & 0x0000) >> 8);
-                addr = instruction & 0x7F;
+        Byte b; // Bıts for bit manipulation
+        std::vector<Byte> data;
+        switch(instruction >> 12){
+            case 0:{ // Byte oriented file register operations
+                OPCODE = (instruction >> 8);
+                addr = (instruction & 0xFF);
+                data.push_back(OPCODE);
+                data.push_back(addr);
+                return data;
+            } break;
+            case 1:{ // Bit oriented file register operations
+                OPCODE = (instruction >> 10);
+                addr = (instruction & 0x7F);
+                b = ((instruction & 0b0000001110000000) >> 7);
+                data.push_back(OPCODE);
+                data.push_back(addr);
+                data.push_back(b);
             }
+            default:{
+				std::cout<<"INSTRUCTION NOT DECODED PROPERLY!"<<std::endl;
+			} break;
         }
     }
 
     INS Fetch(int &Cycles, int BankNo){
-        Byte Data = banks[BankNo].program_memory[registers[0].value]; // Data where PCL points at
+        INS Data = banks[BankNo].program_memory[registers[0].value]; // Data where PCL points at
         registers[0].value++; // PCL++
         Cycles--;
         return Data;
     }
 
-    INS decodeInstruction(int bankNo, Byte pcl){
-        return banks[bankNo].program_memory
-    }
 
     void Execute(int &Cycles){
         while(Cycles > 0){
@@ -157,21 +161,20 @@ public:
                 } break;
             }
 
-            Byte InstructionAddr = Fetch(Cycles, BankNo); // Fetch the instruction
+            std::cout<<"SELECTED BANK: "<<BankNo<<std::endl;
 
-            INS Instruction = decodeInstruction(InstructionAddr, BankNo);
-            // PC
+            INS InstructionAddr = Fetch(Cycles, BankNo); // Fetch the instruction
 
-            //registers[0].value = banks[BankNo].program_memory[0];
+            std::vector<Byte> Instruction = decodeInstruction(InstructionAddr);
 
-            switch(Instruction & 0xFF) {
+            switch(Instruction[0] & 0xFF) {
                 case ADDWF: {
                     Byte Value = Fetch(Cycles, BankNo); // Fetch the data
-                    if(ADDWF & (1 << 4)){
-                        Byte w_addr =  Instruction & 0x0F; // First 4 bits(LSB) of the Instruction ADDWF is an address to store if it's to stored in memory.
-                        banks[BankNo].data_memory[w_addr] = Value + registers[2].value; // Store the stored data + AC in w_addr
+                    if(Instruction[1] >> 7){ // d bit, store in data register if it is 1
+                        Byte addr = Instruction[1] & 0x7F; // 0-6 bits of the Instruction ADDWF is an address to store if it's to stored in memory.
+                        banks[BankNo].data_memory[addr] = Value + registers[2].value; // Store the stored data + AC in w_addr
                     }
-                    else{
+                    else{ // d bit, store in AC if it is 0
                         registers[1].value = Value + registers[1].value; // Store it in AC
                     }
                     /*
@@ -183,20 +186,70 @@ public:
                 }break;
                 case ANDWF:{
                     Byte Value = Fetch(Cycles, BankNo);
-                    if(ADDWF & (1 << 4)){
-                        Byte w_addr =  Instruction & 0x0F; // First 4 bits(LSB) of the Instruction ANDWF is an address to store if it's to stored in memory.
-                        banks[BankNo].data_memory[w_addr] = Value & registers[1].value; // Store the stored data + AC in w_addr
+                    if(Instruction[1] >> 7){ // d bit, store in data register if it is 1
+                        Byte addr = Instruction[1] & 0x7F; // 0-6 bits of the Instruction ADDWF is an address to store if it's to stored in memory.
+                        banks[BankNo].data_memory[addr] = Value & registers[2].value; // Store the stored data + AC in w_addr
                     }
-                    else{
-                        registers[1].value = Value & registers[1].value; // Store it in AC
+                    else{ // d bit, store in AC if it is 0
+                        registers[2].value = Value & registers[1].value; // Store it in AC
+                    }
+                }break;
+                case CLRF:{ // This will cover both CLRF and CLRW instructions as the only difference between them is the deleted register(d=0 W, d=1 f)
+                    Byte addr = Instruction[1] & 0x7F;
+                    if(Instruction[1] >> 7){ // d bit is 0, so we clear the f register
+                        banks[BankNo].data_memory[addr] = 0;
+                    }
+                    else{ // d bit is 1, so we clear the AC register
+                        registers[2].value = 0;
+                    }
+                }break;
+                case COMF:{
+                    Byte Value = Fetch(Cycles, BankNo); // Fetch the data
+                    Byte addr = Instruction[1] & 0x7F;
+                    if(Instruction[1] >> 7){ // d bit is 0, so we store in the f register
+                        banks[BankNo].data_memory[addr] = ~Value;
+                    }
+                    else{ // d bit is 1, so we store in the AC register
+                        registers[2].value = ~Value;
+                    }
+                }break;
+                case DECF:{
+                    Byte addr = Instruction[1] & 0x7F;
+                    if(Instruction[1] >> 7){ // Store in the file register
+                        banks[BankNo].data_memory[addr] = banks[BankNo].data_memory[addr] - 0b00000001;
+                    }
+                    else{ // Store in the AC
+                        registers[2].value = banks[BankNo].data_memory[addr] - 0b00000001;
+                    }
+                }break;
+                case DECFSZ:{
+                    Byte addr = Instruction[1] & 0x7F;
+                    if(Instruction[1] >> 7){ // Store in the file register
+                        if((banks[BankNo].data_memory[addr] - 0b00000001) == 0){
+                            break;
+                        }
+                        banks[BankNo].data_memory[addr] = banks[BankNo].data_memory[addr] - 0b00000001;
+                    }
+                    else{ // Store in the AC
+                        if((banks[BankNo].data_memory[addr] - 0b00000001) == 0){
+                            break;
+                        }
+                        registers[2].value = banks[BankNo].data_memory[addr] - 0b00000001;
+                    }
+                }break;
+                case INCF:{
+                    Byte addr = Instruction[1] & 0x7F;
+                    if(Instruction[1] >> 7){ // Store in the file register
+                        banks[BankNo].data_memory[addr] = banks[BankNo].data_memory[addr] + 0b00000001;
+                    }
+                    else{ // Store in the AC
+                        registers[2].value = banks[BankNo].data_memory[addr] + 0b00000001;
                     }
                 }break;
                 default:{
                     std::cout<<"INSTRUCTION NOT FETCHED PROPERLY!"<<std::endl;
                 }break;
-
-            }break;
-
+            }
         }
     }
 private:
@@ -221,50 +274,6 @@ private:
         MemoryBanks bank2;
 
         MemoryBanks bank3;
-        /*
-        for(int i = 0; i < max_mem ; i++){
-            if(registers.size() > i){
-                bank0.data[i] = registers[i].value;
-            }
-            else{
-                bank0.data[i] = 0;
-            }
-        }*/ // PC AND AC REGISTERS ARE NOT SUPPOSED TO BE IN THE MEMORY BANK.
-
-        for(int i = 0; i < max_mem; i++){
-            bank0.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank1.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank2.data_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank3.data_memory[i] = 0;
-        }
-
-        // RESETTING THE PROGRAM MEMORY
-
-        for(int i = 0; i < max_mem; i++){
-            bank0.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank1.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank2.program_memory[i] = 0;
-        }
-
-        for(int i = 0; i < max_mem; i++){
-            bank3.program_memory[i] = 0;
-        }
-
 
         banks.push_back(bank0);
         banks.push_back(bank1);
@@ -272,20 +281,20 @@ private:
         banks.push_back(bank3);
     }
 
-
     void Reset(){
+
+    	// Clear all the information in program memory and general registers
         for(int i = 0; i < 4 ; i++){
             for(int k = 0; k < max_mem; k++){
-                banks[0].data_memory[i] = 0;
+                banks[i].data_memory[k] = 0;
             }
         }
 
         for(int i = 0; i < 4 ; i++){
             for(int k = 0; k < max_mem; k++){
-                banks[0].program_memory[i] = 0;
+                banks[i].program_memory[k] = 0;
             }
         }
-
         PCL.value = 0x00;
         PCLATH.value = 0x00;
         AC.value = 0x0B;
@@ -295,14 +304,14 @@ private:
     }
 };
 
-
 int main() {
     CPU PIC16F87;
     int Cycles = 3;
-    //PIC16F87.editRegister(0, 0, 0b01110111);
-    PIC16F87.editProgramMemory(0, 0, 0b1110111);
+    PIC16F87.editProgramMemory(0, 0, 0b0000011111100000); // instruction(ADDLW)
+    PIC16F87.editProgramMemory(0, 1, 0b0000000000001111); // data
+    PIC16F87.editProgramMemory(0, 2, 0b0000000111100000); // instruction(CLRF)
     PIC16F87.Execute(Cycles);
     PIC16F87.getBankDataInfo(0);
-    std::cout<<"AC REG: "<<PIC16F87.getBankData(0, 1)<<std::endl;
+    std::cout<<"AC REG: "<<PIC16F87.getBankData(0, 2)<<std::endl;
     return 0;
 }
