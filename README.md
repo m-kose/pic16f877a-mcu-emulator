@@ -4,9 +4,17 @@ This project is nowhere near finished, but it'd make a good template for someone
 So, here's what i think should be done next:
 
 1- Making this project more modular. The whole program in one code(700+ lines of code) is a big no no, I built it on top of each stuff I learned, so it all ended up in one code. But this need to be fixed.
+
+
 2- Implementing more features. Such as interrupts, subroutines, I/O simulations(Reading from PORTB etc.), direct/indirect writing, PCL&PCLATH(as in PIC16F877A MCU) instead of one single Program Counter(PC) and EEPROM. You can even implement the timer modules if you are crazy.
+
+
 3- Implementing more registers. Most of the features that i listed above, will also require fully implemented registers such as PCL, PCLATH, EECON1, EEADDR etc..
+
+
 4- A GUI. It'd a nice to have a GUI of a Microcontroller Development Kit, with all the LEDs and stuff.
+
+
 5- Optimization and optimization.
 
 --------
