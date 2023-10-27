@@ -1,4 +1,4 @@
-This is an pathetic attempt to build an PIC16F877A Microcontroller emulator. 
+This is an pathetic attempt to build a PIC16F877A Microcontroller emulator. 
 Got inspired by this Youtube video(https://youtu.be/qJgsuQoy9bc?list=PLLwK93hM93Z13TRzPx9JqTIn33feefl37), and having lots of free time got me thinking, why should I not build something similiar for an MCU that we used in Microcontrollers class.
 This project is nowhere near finished, but it'd make a good template for someone who's trying to build an MCU/CPU. Also, it has a lot of potantiel for upgrading and optimizing.
 So, here's what i think should be done next:
